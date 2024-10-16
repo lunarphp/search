@@ -68,6 +68,7 @@ class TypesenseEngine extends AbstractEngine
                 'field' => $facet['field_name'],
                 'values' => collect($facet['counts'])->map(
                     fn ($value) => SearchFacet\FacetValue::from([
+                        'label' => $value['value'],
                         'value' => $value['value'],
                         'count' => $value['count'],
                     ])
@@ -85,7 +86,7 @@ class TypesenseEngine extends AbstractEngine
                     continue;
                 }
 
-                $facetValue->value = $valueConfig['label'] ?? $facetValue->value;
+                $facetValue->label = $valueConfig['label'] ?? $facetValue->value;
                 unset($valueConfig['label']);
 
                 $facetValue->additional($valueConfig);
