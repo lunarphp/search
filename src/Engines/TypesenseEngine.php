@@ -20,9 +20,13 @@ class TypesenseEngine extends AbstractEngine
             }
 
             foreach ($this->facets as $field => $values) {
-                $values = collect($values)->map(
-                    fn ($value) => '`'.$value.'`'
-                );
+                $values = collect($values)->map(function ($value) {
+                    if ($value == 'false' || $value == 'true') {
+                        return $value;
+                    }
+                    return '`'.$value.'`';
+                });
+
 
                 if ($values->count() > 1) {
                     $filters->push($field.':['.collect($values)->join(',').']');
