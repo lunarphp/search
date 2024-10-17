@@ -56,7 +56,7 @@ class TypesenseEngine extends AbstractEngine
         $results = $paginator->items();
 
         $documents = collect($results['hits'])->map(fn ($hit) => SearchHit::from([
-            'highlights' => collect($hit['highlights'])->map(
+            'highlights' => collect($hit['highlights'] ?? [])->map(
                 fn ($highlight) => SearchHit\Highlight::from([
                     'field' => $highlight['field'],
                     'matches' => $highlight['matched_tokens'],
