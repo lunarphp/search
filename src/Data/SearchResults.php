@@ -13,7 +13,7 @@ use Spatie\LaravelData\Mappers\SnakeCaseMapper;
 class SearchResults extends Data
 {
     public function __construct(
-        public string $query,
+        public ?string $query,
         public int $count,
         public int $page,
         public int $perPage,
