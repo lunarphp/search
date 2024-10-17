@@ -2,56 +2,71 @@
 
 namespace Lunar\Search\Engines;
 
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Log;
 use Lunar\Search\Data\SearchFacet;
 use Lunar\Search\Data\SearchHit;
 use Lunar\Search\Data\SearchResults;
 use Typesense\Documents;
+use Typesense\Exceptions\ServiceUnavailable;
 
 class TypesenseEngine extends AbstractEngine
 {
     public function get(): SearchResults
     {
-        $paginator = $this->getRawResults(function (Documents $documents, string $query, array $options) {
+        try {
+            $paginator = $this->getRawResults(function (Documents $documents, string $query, array $options) {
 
-            $filters = collect($options['filter_by']);
+                $filters = collect($options['filter_by']);
 
-            foreach ($this->filters as $key => $value) {
-                $filters->push($key.':'.collect($value)->join(','));
-            }
-
-            foreach ($this->facets as $field => $values) {
-                $values = collect($values)->map(function ($value) {
-                    if ($value == 'false' || $value == 'true') {
-                        return $value;
-                    }
-                    return '`'.$value.'`';
-                });
-
-
-                if ($values->count() > 1) {
-                    $filters->push($field.':['.collect($values)->join(',').']');
-
-                    continue;
+                foreach ($this->filters as $key => $value) {
+                    $filters->push($key.':'.collect($value)->join(','));
                 }
 
-                $filters->push($field.':'.collect($values)->join(','));
-            }
+                foreach ($this->facets as $field => $values) {
+                    $values = collect($values)->map(function ($value) {
+                        if ($value == 'false' || $value == 'true') {
+                            return $value;
+                        }
+                        return '`'.$value.'`';
+                    });
 
-            $options['q'] = $query;
-            $facets = $this->getFacetConfig();
 
-            $options['facet_by'] = implode(',', array_keys($facets));
-            $options['max_facet_values'] = 50;
-            $options['per_page'] = $this->perPage;
+                    if ($values->count() > 1) {
+                        $filters->push($field.':['.collect($values)->join(',').']');
 
-            $options['sort_by'] = $this->sortByIsValid() ? $this->sort : '';
+                        continue;
+                    }
 
-            if ($filters->count()) {
-                $options['filter_by'] = $filters->join(' && ');
-            }
+                    $filters->push($field.':'.collect($values)->join(','));
+                }
 
-            return $documents->search($options);
-        });
+                $options['q'] = $query;
+                $facets = $this->getFacetConfig();
+
+                $options['facet_by'] = implode(',', array_keys($facets));
+                $options['max_facet_values'] = 50;
+                $options['per_page'] = $this->perPage;
+
+                $options['sort_by'] = $this->sortByIsValid() ? $this->sort : '';
+
+                if ($filters->count()) {
+                    $options['filter_by'] = $filters->join(' && ');
+                }
+
+                return $documents->search($options);
+            });
+        } catch (\GuzzleHttp\Exception\ConnectException|ServiceUnavailable  $e) {
+            Log::error($e->getMessage());
+            $paginator = new LengthAwarePaginator(
+                items: [
+                    'hits' => [],
+                ],
+                total: 0,
+                perPage: $this->perPage,
+                currentPage: 1,
+            );
+        }
 
         $results = $paginator->items();
 
@@ -66,7 +81,7 @@ class TypesenseEngine extends AbstractEngine
             'document' => $hit['document'],
         ]));
 
-        $facets = collect($results['facet_counts'])->map(
+        $facets = collect($results['facet_counts'] ?? [])->map(
             fn ($facet) => SearchFacet::from([
                 'label' => $this->getFacetConfig($facet['field_name'])['label'] ?? '',
                 'field' => $facet['field_name'],
@@ -98,16 +113,16 @@ class TypesenseEngine extends AbstractEngine
         }
 
         $data = [
-            'query' => $results['request_params']['q'],
+            'query' => $this->query,
             'total_pages' => $paginator->lastPage(),
             'page' => $paginator->currentPage(),
             'count' => $paginator->total(),
             'per_page' => $paginator->perPage(),
             'hits' => $documents,
             'facets' => $facets,
-            'paginator' => $paginator->appends([
+            'links' => $paginator->appends([
                 'facets' => http_build_query($this->facets),
-            ]),
+            ])->links(),
         ];
 
         return SearchResults::from($data);
