@@ -12,49 +12,79 @@ use Typesense\Exceptions\ServiceUnavailable;
 
 class TypesenseEngine extends AbstractEngine
 {
+    protected function buildSearchOptions(array $options, string $query, $useFacetFilters = true): array
+    {
+        $filters = collect($options['filter_by']);
+
+        foreach ($this->filters as $key => $value) {
+            $filters->push($key.':'.collect($value)->join(','));
+        }
+
+        if ($useFacetFilters) {
+            foreach ($this->facets as $field => $values) {
+                $values = collect($values)->map(function ($value) {
+                    if ($value == 'false' || $value == 'true') {
+                        return $value;
+                    }
+                    return '`'.$value.'`';
+                });
+
+
+                if ($values->count() > 1) {
+                    $filters->push($field.':['.collect($values)->join(',').']');
+
+                    continue;
+                }
+
+                $filters->push($field.':'.collect($values)->join(','));
+            }
+        }
+
+        $options['q'] = $query;
+        $facets = $this->getFacetConfig();
+        $facetBy = array_keys($facets);
+
+        foreach ($facets as $field => $config) {
+            if (!($config['hierarchy'] ?? false)) {
+                continue;
+            }
+            unset(
+                $facetBy[array_search($field, $facetBy)]
+            );
+            $facetBy = [
+                ...$facetBy,
+                ...array_map(
+                fn ($value) => "{$field}.{$value}",
+                $config['levels'] ?? []
+                )
+            ];
+        }
+
+        $options['facet_by'] = implode(',', $facetBy);
+        $options['max_facet_values'] = 50;
+
+        $options['sort_by'] = $this->sortByIsValid() ? $this->sort : '';
+
+        if ($filters->count()) {
+            $options['filter_by'] = $filters->join(' && ');
+        }
+
+        return $options;
+    }
+
     public function get(): SearchResults
     {
         try {
+            $preResults = $this->getRawResults(function (Documents $documents, string $query, array $options) {
+                return $documents->search(
+                    $this->buildSearchOptions($options, $query, useFacetFilters: false)
+                );
+            });
+
             $paginator = $this->getRawResults(function (Documents $documents, string $query, array $options) {
-
-                $filters = collect($options['filter_by']);
-
-                foreach ($this->filters as $key => $value) {
-                    $filters->push($key.':'.collect($value)->join(','));
-                }
-
-                foreach ($this->facets as $field => $values) {
-                    $values = collect($values)->map(function ($value) {
-                        if ($value == 'false' || $value == 'true') {
-                            return $value;
-                        }
-                        return '`'.$value.'`';
-                    });
-
-
-                    if ($values->count() > 1) {
-                        $filters->push($field.':['.collect($values)->join(',').']');
-
-                        continue;
-                    }
-
-                    $filters->push($field.':'.collect($values)->join(','));
-                }
-
-                $options['q'] = $query;
-                $facets = $this->getFacetConfig();
-
-                $options['facet_by'] = implode(',', array_keys($facets));
-                $options['max_facet_values'] = 50;
-                $options['per_page'] = $this->perPage;
-
-                $options['sort_by'] = $this->sortByIsValid() ? $this->sort : '';
-
-                if ($filters->count()) {
-                    $options['filter_by'] = $filters->join(' && ');
-                }
-
-                return $documents->search($options);
+                return $documents->search(
+                    $this->buildSearchOptions($options, $query),
+                );
             });
         } catch (\GuzzleHttp\Exception\ConnectException|ServiceUnavailable  $e) {
             Log::error($e->getMessage());
@@ -81,7 +111,38 @@ class TypesenseEngine extends AbstractEngine
             'document' => $hit['document'],
         ]));
 
-        $facets = collect($results['facet_counts'] ?? [])->map(
+//        $facets = [];
+//        $hierarchyFacets = [];
+//
+//        foreach ($preResults['facet_counts'] ?? [] as $facet) {
+//            $facetConfig = $this->getFacetConfig($facet['field_name']);
+//
+//            $nested = count(explode('.', $facet['field_name'])) > 1;
+//
+//            if ($nested) {
+//                $nestedField = explode('.', $facet['field_name'])[0];
+//
+//                $hierarchyFacets[$nestedField][] = $facet;
+//
+//                continue;
+//            }
+//
+//            $facets[] = SearchFacet::from([
+//                'label' => $this->getFacetConfig($facet['field_name'])['label'] ?? '',
+//                'field' => $facet['field_name'],
+//                'hierarchy' => $nested,
+//                'values' => collect($facet['counts'])->map(
+//                    fn ($value) => SearchFacet\FacetValue::from([
+//                        'label' => $value['value'],
+//                        'value' => $value['value'],
+//                        'count' => $value['count'],
+//                    ])
+//                ),
+//            ]);
+//        }
+
+
+        $facets = collect($preResults['facet_counts'] ?? [])->map(
             fn ($facet) => SearchFacet::from([
                 'label' => $this->getFacetConfig($facet['field_name'])['label'] ?? '',
                 'field' => $facet['field_name'],

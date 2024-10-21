@@ -13,5 +13,6 @@ class SearchFacet extends Data
         public string $field,
         #[DataCollectionOf(FacetValue::class)]
         public array $values,
+        public bool $hierarchy = false
     ) {}
 }

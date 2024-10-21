@@ -108,7 +108,7 @@ abstract class AbstractEngine
             return config('lunar.search.facets.'.$this->modelType);
         }
 
-        return config('lunar.search.facets.'.$this->modelType.'.'.$field, []);
+        return config('lunar.search.facets.'.$this->modelType, [])[$field] ?? [];
     }
 
     abstract public function get(): mixed;
