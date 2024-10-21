@@ -4,6 +4,8 @@ namespace Lunar\Search\Engines;
 
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
+use Laravel\Scout\EngineManager;
+use Laravel\Scout\Scout;
 use Lunar\Search\Data\SearchFacet;
 use Lunar\Search\Data\SearchHit;
 use Lunar\Search\Data\SearchResults;
@@ -69,23 +71,33 @@ class TypesenseEngine extends AbstractEngine
             $options['filter_by'] = $filters->join(' && ');
         }
 
-        return $options;
+        return [
+            'collection' => 'voltimum_products',
+            ...$options
+        ];
     }
 
     public function get(): SearchResults
     {
         try {
-            $preResults = $this->getRawResults(function (Documents $documents, string $query, array $options) {
-                return $documents->search(
-                    $this->buildSearchOptions($options, $query, useFacetFilters: false)
-                );
+            $paginator = $this->getRawResults(function (Documents $documents, string $query, array $options) {
+                $engine = app(EngineManager::class)->engine('typesense');
+
+                $searchRequests = [
+                    'searches' => [
+                        $this->buildSearchOptions($options, $query),
+                        $this->buildSearchOptions($options, $query, useFacetFilters: false)
+                    ]
+                ];
+
+                $response = $engine->getMultiSearch()->perform($searchRequests);
+
+                return [
+                    ...$response['results'][0],
+                    'unfaceted_response' => $response['results'][1],
+                ];
             });
 
-            $paginator = $this->getRawResults(function (Documents $documents, string $query, array $options) {
-                return $documents->search(
-                    $this->buildSearchOptions($options, $query),
-                );
-            });
         } catch (\GuzzleHttp\Exception\ConnectException|ServiceUnavailable  $e) {
             Log::error($e->getMessage());
             $paginator = new LengthAwarePaginator(
@@ -142,7 +154,7 @@ class TypesenseEngine extends AbstractEngine
 //        }
 
 
-        $facets = collect($preResults['facet_counts'] ?? [])->map(
+        $facets = collect($paginator['unfaceted_response']['facet_counts'] ?? [])->map(
             fn ($facet) => SearchFacet::from([
                 'label' => $this->getFacetConfig($facet['field_name'])['label'] ?? '',
                 'field' => $facet['field_name'],
