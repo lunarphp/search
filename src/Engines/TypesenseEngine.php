@@ -71,10 +71,7 @@ class TypesenseEngine extends AbstractEngine
             $options['filter_by'] = $filters->join(' && ');
         }
 
-        return [
-            'collection' => 'voltimum_products',
-            ...$options
-        ];
+        return $options;
     }
 
     public function get(): SearchResults
@@ -90,7 +87,9 @@ class TypesenseEngine extends AbstractEngine
                     ]
                 ];
 
-                $response = $engine->getMultiSearch()->perform($searchRequests);
+                $response = $engine->getMultiSearch()->perform($searchRequests, [
+                    'collection' => (new $this->modelType)->searchableAs(),
+                ]);
 
                 return [
                     ...$response['results'][0],
