@@ -17,6 +17,18 @@ class TypesenseEngine extends AbstractEngine
     protected function buildSearchOptions(array $options, string $query, $useFacetFilters = true): array
     {
         $filters = collect($options['filter_by']);
+        $facets = $this->getFacetConfig();
+
+        $facetQuery = collect();
+
+        foreach ($facets as $facetConfig) {
+            if (empty($facetConfig['facet_query'])) {
+                continue;
+            }
+            $facetQuery->push($facetConfig['facet_query']);
+        }
+
+        $facetQuery = $facetQuery->join(',');
 
         foreach ($this->filters as $key => $value) {
             $filters->push($key.':'.collect($value)->join(','));
@@ -43,6 +55,7 @@ class TypesenseEngine extends AbstractEngine
         }
 
         $options['q'] = $query;
+        $options['facet_query'] = $facetQuery;
         $facets = $this->getFacetConfig();
         $facetBy = array_keys($facets);
 
