@@ -124,6 +124,8 @@ class TypesenseEngine extends AbstractEngine
             }
         }
 
+        $newPaginator = clone $paginator;
+
         $data = [
             'query' => $this->query,
             'total_pages' => $paginator->lastPage(),
@@ -132,7 +134,7 @@ class TypesenseEngine extends AbstractEngine
             'per_page' => $paginator->perPage(),
             'hits' => $documents,
             'facets' => $facets,
-            'links' => $paginator->setCollection(
+            'links' => $newPaginator->setCollection(
                 collect($results['hits'])
             )->appends([
                 'facets' => http_build_query($this->facets),
