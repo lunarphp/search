@@ -11,6 +11,8 @@ abstract class AbstractEngine
 {
     protected string $modelType = Product::class;
 
+    protected array $queryExtenders = [];
+
     protected ?string $query = null;
 
     protected array $filters = [];
@@ -20,6 +22,13 @@ abstract class AbstractEngine
     protected int $perPage = 50;
 
     protected string $sort = '';
+
+    public function extendQuery(\Closure $callable): self
+    {
+        $this->queryExtenders[] = $callable;
+
+        return $this;
+    }
 
     public function filter(array $filters): self
     {
@@ -135,6 +144,10 @@ abstract class AbstractEngine
             ]);
         }
 
+        foreach ($this->queryExtenders as $extender) {
+            $params = call_user_func($extender, $this, $queries);
+        }
+
         return collect($queries);
     }
 
@@ -168,7 +181,7 @@ abstract class AbstractEngine
 
         return $field && ($field['sort'] ?? false);
     }
-
+    
     abstract public function get(): mixed;
 
     abstract protected function getFieldConfig(): array;

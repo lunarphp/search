@@ -126,6 +126,7 @@ class TypesenseEngine extends AbstractEngine
         ]);
     }
 
+
     protected function buildSearch(array $options): array
     {
         $searchQueries = $this->getSearchQueries();
@@ -195,6 +196,7 @@ class TypesenseEngine extends AbstractEngine
 
         return $requests;
     }
+
 
     protected function getFieldConfig(): array
     {
