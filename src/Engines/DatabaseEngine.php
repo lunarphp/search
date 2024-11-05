@@ -41,4 +41,9 @@ class DatabaseEngine extends AbstractEngine
             'facets' => collect(),
         ]);
     }
+
+    protected function getFieldConfig(): array
+    {
+        return [];
+    }
 }

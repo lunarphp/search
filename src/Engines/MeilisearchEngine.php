@@ -101,4 +101,9 @@ class MeilisearchEngine extends AbstractEngine
 
         return '('.$field.' = "'.$values->first().'")';
     }
+
+    protected function getFieldConfig(): array
+    {
+        return [];
+    }
 }

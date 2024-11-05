@@ -3,7 +3,9 @@
 namespace Lunar\Search\Engines;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Lunar\Models\Product;
+use Lunar\Search\Data\Builder\SearchQuery;
 
 abstract class AbstractEngine
 {
@@ -111,5 +113,63 @@ abstract class AbstractEngine
         return config('lunar.search.facets.'.$this->modelType, [])[$field] ?? [];
     }
 
+    protected function getSearchQueries(): Collection
+    {
+        $facets = $this->getFacetConfig();
+
+        $queries = [
+            SearchQuery::from([
+                'query' => $this->query,
+                'facets' => array_keys($facets),
+                'facet_filters' => $this->facets,
+            ])
+        ];
+
+        foreach ($this->facets as $facetField => $facetFilterValues) {
+            $queries[] = SearchQuery::from([
+               'query' => $this->query,
+               'facets' => [$facetField],
+                'facet_filters' => collect($this->facets)->reject(
+                    fn ($value, $field) => $field === $facetField
+                )->toArray()
+            ]);
+        }
+
+        return collect($queries);
+    }
+
+    protected function sortByIsValid(): bool
+    {
+        $sort = $this->sort;
+
+        if (! $sort) {
+            return true;
+        }
+
+        $parts = explode(':', $sort);
+
+        if (! isset($parts[1])) {
+            return false;
+        }
+
+        if (! in_array($parts[1], ['asc', 'desc'])) {
+            return false;
+        }
+
+        $config = $this->getFieldConfig();
+
+        if (empty($config)) {
+            return false;
+        }
+
+        $field = collect($config)->first(
+            fn ($field) => $field['name'] == $parts[0]
+        );
+
+        return $field && ($field['sort'] ?? false);
+    }
+
     abstract public function get(): mixed;
+
+    abstract protected function getFieldConfig(): array;
 }

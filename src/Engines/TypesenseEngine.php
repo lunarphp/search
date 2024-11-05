@@ -5,7 +5,6 @@ namespace Lunar\Search\Engines;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
 use Laravel\Scout\EngineManager;
-use Laravel\Scout\Scout;
 use Lunar\Search\Data\SearchFacet;
 use Lunar\Search\Data\SearchHit;
 use Lunar\Search\Data\SearchResults;
@@ -20,28 +19,44 @@ class TypesenseEngine extends AbstractEngine
             $paginator = $this->getRawResults(function (Documents $documents, string $query, array $options) {
                 $engine = app(EngineManager::class)->engine('typesense');
 
-                $searchRequests = [
-                    'searches' => [
-                        $this->buildSearchOptions($options, $query),
-                        $this->buildSearchOptions($options, $query, useFacetFilters: false)
-                    ]
+                $request = [
+                    'searches' => $this->buildSearch(
+                        $options
+                    )
                 ];
 
-                $response = $engine->getMultiSearch()->perform($searchRequests, [
+                $response = $engine->getMultiSearch()->perform($request, [
                     'collection' => (new $this->modelType)->searchableAs(),
                 ]);
 
+                $completeResults = $response['results'][0];
+
+                unset( $response['results'][0]);
+                $otherResults =  $response['results'];
+
+                $facets = collect($completeResults['facet_counts'])->mapWithKeys(
+                    fn ($facets) => [$facets['field_name'] => $facets]
+                );
+
+                foreach ($otherResults as $result) {
+                    foreach ($result['facet_counts'] as $facet) {
+                        $facets->put($facet['field_name'], $facet);
+                    }
+                }
+
                 return [
-                    ...$response['results'][0],
-                    'unfaceted_response' => $response['results'][1],
+                    ...$completeResults,
+                    'facet_counts' => $facets->toArray()
                 ];
             });
+
 
         } catch (\GuzzleHttp\Exception\ConnectException|ServiceUnavailable  $e) {
             Log::error($e->getMessage());
             $paginator = new LengthAwarePaginator(
                 items: [
                     'hits' => [],
+                    'facet_counts' => [],
                 ],
                 total: 0,
                 perPage: $this->perPage,
@@ -62,38 +77,7 @@ class TypesenseEngine extends AbstractEngine
             'document' => $hit['document'],
         ]));
 
-//        $facets = [];
-//        $hierarchyFacets = [];
-//
-//        foreach ($preResults['facet_counts'] ?? [] as $facet) {
-//            $facetConfig = $this->getFacetConfig($facet['field_name']);
-//
-//            $nested = count(explode('.', $facet['field_name'])) > 1;
-//
-//            if ($nested) {
-//                $nestedField = explode('.', $facet['field_name'])[0];
-//
-//                $hierarchyFacets[$nestedField][] = $facet;
-//
-//                continue;
-//            }
-//
-//            $facets[] = SearchFacet::from([
-//                'label' => $this->getFacetConfig($facet['field_name'])['label'] ?? '',
-//                'field' => $facet['field_name'],
-//                'hierarchy' => $nested,
-//                'values' => collect($facet['counts'])->map(
-//                    fn ($value) => SearchFacet\FacetValue::from([
-//                        'label' => $value['value'],
-//                        'value' => $value['value'],
-//                        'count' => $value['count'],
-//                    ])
-//                ),
-//            ]);
-//        }
-
-
-        $facets = collect($paginator['unfaceted_response']['facet_counts'] ?? [])->map(
+        $facets = collect($results['facet_counts'] ?? [])->map(
             fn ($facet) => SearchFacet::from([
                 'label' => $this->getFacetConfig($facet['field_name'])['label'] ?? '',
                 'field' => $facet['field_name'],
@@ -126,7 +110,7 @@ class TypesenseEngine extends AbstractEngine
 
         $newPaginator = clone $paginator;
 
-        $data = [
+        return SearchResults::from([
             'query' => $this->query,
             'total_pages' => $paginator->lastPage(),
             'page' => $paginator->currentPage(),
@@ -139,33 +123,43 @@ class TypesenseEngine extends AbstractEngine
             )->appends([
                 'facets' => http_build_query($this->facets),
             ])->links(),
-        ];
-
-        return SearchResults::from($data);
+        ]);
     }
 
-    protected function buildSearchOptions(array $options, string $query, $useFacetFilters = true): array
+    protected function buildSearch(array $options): array
     {
-        $filters = collect($options['filter_by']);
+        $searchQueries = $this->getSearchQueries();
+
+        $requests = [];
+
         $facets = $this->getFacetConfig();
 
-        $facetQuery = collect();
-
-        foreach ($facets as $facetConfig) {
-            if (empty($facetConfig['facet_query'])) {
-                continue;
-            }
-            $facetQuery->push($facetConfig['facet_query']);
-        }
-
-        $facetQuery = $facetQuery->join(',');
+        $filters = collect($options['filter_by']);
 
         foreach ($this->filters as $key => $value) {
             $filters->push($key.':'.collect($value)->join(','));
         }
 
-        if ($useFacetFilters) {
-            foreach ($this->facets as $field => $values) {
+        foreach ($searchQueries as $searchQuery) {
+
+            $filters = collect();
+
+            $facetQuery = collect();
+
+            $facetConfig = collect($facets)->filter(
+                fn ($facet, $field) => in_array($field, $searchQuery->facets)
+            );
+
+            foreach ($facetConfig as $facetConfigValue) {
+                if (empty($facetConfigValue['facet_query'])) {
+                    continue;
+                }
+                $facetQuery->push($facetConfigValue['facet_query']);
+            }
+
+            $facetQuery = $facetQuery->join(',');
+
+            foreach ($searchQuery->facetFilters as $field => $values) {
                 $values = collect($values)->map(function ($value) {
                     if ($value == 'false' || $value == 'true') {
                         return $value;
@@ -182,70 +176,24 @@ class TypesenseEngine extends AbstractEngine
 
                 $filters->push($field.':'.collect($values)->join(','));
             }
-        }
 
-        $options['q'] = $query;
-        $options['facet_query'] = $facetQuery;
-        $facets = $this->getFacetConfig();
-        $facetBy = array_keys($facets);
-
-        foreach ($facets as $field => $config) {
-            if (!($config['hierarchy'] ?? false)) {
-                continue;
-            }
-            unset(
-                $facetBy[array_search($field, $facetBy)]
-            );
-            $facetBy = [
-                ...$facetBy,
-                ...array_map(
-                    fn ($value) => "{$field}.{$value}",
-                    $config['levels'] ?? []
-                )
+            $params = [
+                ...$options,
+                'q' => $searchQuery->query,
+                'facet_query' => $facetQuery,
+                'max_facet_values' => 50,
+                'sort_by' => $this->sortByIsValid() ? $this->sort : '',
+                'facet_by' => implode(',', $searchQuery->facets),
             ];
+
+            if ($filters->count()) {
+                $params['filter_by'] = $filters->join(' && ');
+            }
+
+            $requests[] = $params;
         }
 
-        $options['facet_by'] = implode(',', $facetBy);
-        $options['max_facet_values'] = 50;
-
-        $options['sort_by'] = $this->sortByIsValid() ? $this->sort : '';
-
-        if ($filters->count()) {
-            $options['filter_by'] = $filters->join(' && ');
-        }
-
-        return $options;
-    }
-
-    protected function sortByIsValid(): bool
-    {
-        $sort = $this->sort;
-
-        if (! $sort) {
-            return true;
-        }
-
-        $parts = explode(':', $sort);
-
-        if (! isset($parts[1])) {
-            return false;
-        }
-
-        if (! in_array($parts[1], ['asc', 'desc'])) {
-            return false;
-        }
-
-        $config = $this->getFieldConfig();
-
-        if (empty($config)) {
-            return false;
-        }
-
-        $field = collect($config)->first(
-            fn ($field) => $field['name'] == $parts[0]
-        );
-
-        return $field && ($field['sort'] ?? false);
+        return $requests;
     }
 
     protected function getFieldConfig(): array
