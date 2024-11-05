@@ -175,7 +175,7 @@ class TypesenseEngine extends AbstractEngine
                     continue;
                 }
 
-                $filters->push($field.':'.collect($values)->join(','));
+                $filters->push($field.':='.collect($values)->join(','));
             }
 
             $params = [
