@@ -134,16 +134,14 @@ class TypesenseEngine extends AbstractEngine
         $requests = [];
 
         $facets = $this->getFacetConfig();
-
-        $filters = collect($options['filter_by']);
-
-        foreach ($this->filters as $key => $value) {
-            $filters->push($key.':'.collect($value)->join(','));
-        }
-
+        
         foreach ($searchQueries as $searchQuery) {
 
-            $filters = collect();
+            $filters = collect($options['filter_by']);
+
+            foreach ($this->filters as $key => $value) {
+                $filters->push($key.':'.collect($value)->join(','));
+            }
 
             $facetQuery = collect();
 
