@@ -3,8 +3,10 @@
 namespace Lunar\Search\Engines;
 
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Laravel\Scout\EngineManager;
+use Lunar\Models\Product;
 use Lunar\Search\Data\SearchFacet;
 use Lunar\Search\Data\SearchHit;
 use Lunar\Search\Data\SearchResults;
@@ -134,7 +136,7 @@ class TypesenseEngine extends AbstractEngine
         $requests = [];
 
         $facets = $this->getFacetConfig();
-        
+
         foreach ($searchQueries as $searchQuery) {
 
             $filters = collect($options['filter_by']);
@@ -193,6 +195,15 @@ class TypesenseEngine extends AbstractEngine
         }
 
         return $requests;
+    }
+
+    public function deleteByIds(Collection $ids): array
+    {
+        $typesense = app(EngineManager::class)->engine('typesense');
+        $index = (new Product)->searchableAs();
+        return $typesense->getCollections()[$index]->documents->delete([
+            'filter_by' => 'id: ['.$ids->join(',').']',
+        ]);
     }
 
 

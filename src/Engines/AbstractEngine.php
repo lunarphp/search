@@ -181,6 +181,11 @@ abstract class AbstractEngine
 
         return $field && ($field['sort'] ?? false);
     }
+
+    public function deleteByIds(Collection $ids): array
+    {
+        return [];
+    }
     
     abstract public function get(): mixed;
 
