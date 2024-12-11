@@ -27,6 +27,7 @@ class TypesenseEngine extends AbstractEngine
                     )
                 ];
 
+
                 $response = $engine->getMultiSearch()->perform($request, [
                     'collection' => (new $this->modelType)->searchableAs(),
                 ]);
@@ -182,8 +183,9 @@ class TypesenseEngine extends AbstractEngine
                 ...$options,
                 'q' => $searchQuery->query,
                 'facet_query' => $facetQuery,
+                'prefix' => false,
                 'max_facet_values' => 50,
-                'sort_by' => $this->sortByIsValid() ? $this->sort : '',
+                'sort_by' => '_text_match:desc',
                 'facet_by' => implode(',', $searchQuery->facets),
             ];
 
