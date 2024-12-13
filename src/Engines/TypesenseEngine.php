@@ -27,7 +27,6 @@ class TypesenseEngine extends AbstractEngine
                     )
                 ];
 
-
                 $response = $engine->getMultiSearch()->perform($request, [
                     'collection' => (new $this->modelType)->searchableAs(),
                 ]);
@@ -179,13 +178,20 @@ class TypesenseEngine extends AbstractEngine
                 $filters->push($field.':='.collect($values)->join(','));
             }
 
+            $queryBy = $options['query_by'];
+
+            if (!$this->query) {
+                $queryBy = str_replace('embedding,', '', $queryBy);
+            }
+
             $params = [
                 ...$options,
+                'query_by' => $queryBy,
                 'q' => $searchQuery->query,
                 'facet_query' => $facetQuery,
                 'prefix' => false,
                 'max_facet_values' => 50,
-                'sort_by' => '_text_match:desc',
+                'sort_by' => $this->sortByIsValid() ? $this->sort : '_text_match:desc',
                 'facet_by' => implode(',', $searchQuery->facets),
             ];
 
