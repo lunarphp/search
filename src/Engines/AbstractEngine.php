@@ -23,6 +23,9 @@ abstract class AbstractEngine
 
     protected string $sort = '';
 
+    protected string $sortRaw = '';
+
+
     public function extendQuery(\Closure $callable): self
     {
         $this->queryExtenders[] = $callable;
@@ -92,6 +95,13 @@ abstract class AbstractEngine
     public function sort(string $sort): self
     {
         $this->sort = $sort;
+
+        return $this;
+    }
+
+    public function sortRaw(string $sort): self
+    {
+        $this->sortRaw = $sort;
 
         return $this;
     }
