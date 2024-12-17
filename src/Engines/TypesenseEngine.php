@@ -30,7 +30,7 @@ class TypesenseEngine extends AbstractEngine
                 $response = $engine->getMultiSearch()->perform($request, [
                     'collection' => (new $this->modelType)->searchableAs(),
                 ]);
-                
+
                 $completeResults = $response['results'][0];
 
                 unset( $response['results'][0]);
@@ -190,10 +190,15 @@ class TypesenseEngine extends AbstractEngine
                 'q' => $searchQuery->query,
                 'facet_query' => $facetQuery,
                 'prefix' => false,
+                'exlude_fields' => 'embedding',
                 'max_facet_values' => 50,
                 'sort_by' => $this->sortRaw ?: ($this->sortByIsValid() ? $this->sort : '_text_match:desc'),
                 'facet_by' => implode(',', $searchQuery->facets),
             ];
+
+            if ($this->query) {
+                $params['vector_query'] = "embedding:([], k: 200)";
+            }
 
             if ($filters->count()) {
                 $params['filter_by'] = $filters->join(' && ');
