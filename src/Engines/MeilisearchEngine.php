@@ -2,6 +2,7 @@
 
 namespace Lunar\Search\Engines;
 
+use Illuminate\Support\Collection;
 use Laravel\Scout\EngineManager;
 use Lunar\Search\Data\SearchFacet;
 use Lunar\Search\Data\SearchHit;
@@ -38,59 +39,29 @@ class MeilisearchEngine extends AbstractEngine
 
             return [
                 ...$completeResults,
-                'facet_counts' => $facets->toArray()
+                'facetDistribution' => $facets
             ];
         });
 
         $results = $paginator->items();
 
-        $documents = collect($results['hits'])->map(fn ($hit) => SearchHit::from([
-            'highlights' => collect(),
-            'document' => $hit,
-        ]));
-
-        $facets = collect($results['facetDistribution'])->map(
-            fn ($values, $field) => SearchFacet::from([
-                'label' => $this->getFacetConfig($field)['label'] ?? $field,
-                'field' => $field,
-                'values' => collect($values)->map(
-                    fn ($count, $value) => SearchFacet\FacetValue::from([
-                        'label' => $value,
-                        'value' => $value,
-                        'count' => $count,
-                    ])
-                )->values(),
-            ])
-        )->values();
-
-        foreach ($facets as $facet) {
-            $facetConfig = $this->getFacetConfig($facet->field);
-            foreach ($facet->values as $faceValue) {
-                if (empty($facetConfig[$faceValue->value])) {
-                    continue;
-                }
-                $faceValue->additional($facetConfig[$faceValue->value]);
-            }
-        }
-
-        $newPaginator = clone $paginator;
-
-        $data = [
+        return SearchResults::from([
             'query' => $results['query'],
             'total_pages' => $paginator->lastPage(),
             'page' => $paginator->currentPage(),
             'count' => $paginator->total(),
             'per_page' => $paginator->perPage(),
-            'hits' => $documents,
-            'facets' => $facets,
-            'links' => $newPaginator->setCollection(
+            'hits' => collect($results['hits'])->map(fn ($hit) => SearchHit::from([
+                'highlights' => collect(),
+                'document' => $hit,
+            ])),
+            'facets' => $this->mapFacets($results),
+            'links' => (clone $paginator)->setCollection(
                 collect($results['hits'])
             )->appends([
                 'facets' => http_build_query($this->facets),
             ])->links(),
-        ];
-
-        return SearchResults::from($data);
+        ]);
     }
 
     protected function buildSearch(array $options, Indexes $indexes): array
@@ -121,12 +92,6 @@ class MeilisearchEngine extends AbstractEngine
             }
 
             foreach ($searchQuery->facetFilters as $field => $values) {
-                $values = collect($values)->map(function ($value) {
-                    if ($value == 'false' || $value == 'true') {
-                        return $value;
-                    }
-                    return $value;
-                });
                 $filters->push($this->mapFilter($field, $values));
             }
 
@@ -135,6 +100,36 @@ class MeilisearchEngine extends AbstractEngine
         }
 
         return $requests;
+    }
+
+    public function mapFacets(array $results): Collection
+    {
+        $facets = collect($results['facetDistribution'])->map(
+            fn ($values, $field) => SearchFacet::from([
+                'label' => $this->getFacetConfig($field)['label'] ?? $field,
+                'field' => $field,
+                'values' => collect($values)->map(
+                    fn ($count, $value) => SearchFacet\FacetValue::from([
+                        'label' => $value,
+                        'value' => $value,
+                        'count' => $count,
+                        'active' => in_array($value, $this->facets[$field] ?? [])
+                    ])
+                )->values(),
+            ])
+        )->values();
+
+        foreach ($facets as $facet) {
+            $facetConfig = $this->getFacetConfig($facet->field);
+            foreach ($facet->values as $facetValue) {
+                if (empty($facetConfig[$facetValue->value])) {
+                    continue;
+                }
+                $facetValue->additional($facetConfig[$facetValue->value]);
+            }
+        }
+
+        return $facets;
     }
 
     protected function mapFilter(string $field, mixed $value): string

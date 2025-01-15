@@ -11,6 +11,7 @@ class FacetValue extends Data
         public string $label,
         public string $value,
         public int $count = 0,
+        public bool $active = false,
         #[DataCollectionOf(FacetValue::class)]
         public array $children = []
     ) {}
