@@ -3,7 +3,7 @@
 return [
     'facets' => [
         \Lunar\Models\Product::class => [
-            //            'brand' => [],
+            'brand' => [],
             //            'size' => [],
             //            'colour' => [
             //                'Red' => [
