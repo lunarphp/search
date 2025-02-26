@@ -13,7 +13,7 @@ abstract class AbstractEngine
 
     protected array $queryExtenders = [];
 
-    protected ?string $query = null;
+    protected string $query = '';
 
     protected array $filters = [];
 
@@ -24,7 +24,6 @@ abstract class AbstractEngine
     protected string $sort = '';
 
     protected string $sortRaw = '';
-
 
     public function extendQuery(\Closure $callable): self
     {
@@ -99,6 +98,11 @@ abstract class AbstractEngine
         return $this;
     }
 
+    public function getSort(): ?string
+    {
+        return $this->sort;
+    }
+
     public function sortRaw(string $sort): self
     {
         $this->sortRaw = $sort;
@@ -126,13 +130,13 @@ abstract class AbstractEngine
     protected function getFacetConfig(?string $field = null): ?array
     {
         if (! $field) {
-            return config('lunar.search.facets.'.$this->modelType);
+            return config('lunar.search.facets.'.$this->modelType, []);
         }
 
         return config('lunar.search.facets.'.$this->modelType, [])[$field] ?? [];
     }
 
-    protected function getSearchQueries(): Collection
+    public function getSearchQueries(): Collection
     {
         $facets = $this->getFacetConfig();
 
@@ -141,16 +145,16 @@ abstract class AbstractEngine
                 'query' => $this->query,
                 'facets' => array_keys($facets),
                 'facet_filters' => $this->facets,
-            ])
+            ]),
         ];
 
         foreach ($this->facets as $facetField => $facetFilterValues) {
             $queries[] = SearchQuery::from([
-               'query' => $this->query,
-               'facets' => [$facetField],
+                'query' => $this->query,
+                'facets' => [$facetField],
                 'facet_filters' => collect($this->facets)->reject(
                     fn ($value, $field) => $field === $facetField
-                )->toArray()
+                )->toArray(),
             ]);
         }
 
@@ -196,7 +200,7 @@ abstract class AbstractEngine
     {
         return [];
     }
-    
+
     abstract public function get(): mixed;
 
     abstract protected function getFieldConfig(): array;
