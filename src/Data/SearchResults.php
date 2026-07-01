@@ -2,7 +2,6 @@
 
 namespace Lunar\Search\Data;
 
-use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\View\View;
 use Spatie\LaravelData\Attributes\DataCollectionOf;
 use Spatie\LaravelData\Attributes\MapName;
@@ -10,6 +9,7 @@ use Spatie\LaravelData\Data;
 use Spatie\LaravelData\Mappers\SnakeCaseMapper;
 
 #[MapName(SnakeCaseMapper::class)]
+/** @typescript */
 class SearchResults extends Data
 {
     public function __construct(
@@ -24,4 +24,12 @@ class SearchResults extends Data
         public array $facets,
         public View $links,
     ) {}
+
+    public function toArray(): array
+    {
+        return [
+            ...parent::toArray(),
+            'links' => $this->links->getData()['paginator']->toArray()['links'],
+        ];
+    }
 }

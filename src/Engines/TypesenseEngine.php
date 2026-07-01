@@ -2,13 +2,16 @@
 
 namespace Lunar\Search\Engines;
 
+use GuzzleHttp\Exception\ConnectException;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Laravel\Scout\EngineManager;
-use Lunar\Models\Product;
+use Lunar\Core\Models\Product;
 use Lunar\Search\Data\SearchFacet;
+use Lunar\Search\Data\SearchFacetValue;
 use Lunar\Search\Data\SearchHit;
+use Lunar\Search\Data\SearchHitHighlight;
 use Lunar\Search\Data\SearchResults;
 use Typesense\Documents;
 use Typesense\Exceptions\ServiceUnavailable;
@@ -24,7 +27,7 @@ class TypesenseEngine extends AbstractEngine
                 $request = [
                     'searches' => $this->buildSearch(
                         $options
-                    )
+                    ),
                 ];
 
                 $response = $engine->getMultiSearch()->perform($request, [
@@ -33,8 +36,8 @@ class TypesenseEngine extends AbstractEngine
 
                 $completeResults = $response['results'][0];
 
-                unset( $response['results'][0]);
-                $otherResults =  $response['results'];
+                unset($response['results'][0]);
+                $otherResults = $response['results'];
 
                 $facets = collect($completeResults['facet_counts'])->mapWithKeys(
                     fn ($facets) => [$facets['field_name'] => $facets]
@@ -48,12 +51,11 @@ class TypesenseEngine extends AbstractEngine
 
                 return [
                     ...$completeResults,
-                    'facet_counts' => $facets->toArray()
+                    'facet_counts' => $facets->toArray(),
                 ];
             });
 
-
-        } catch (\GuzzleHttp\Exception\ConnectException|ServiceUnavailable  $e) {
+        } catch (ConnectException|ServiceUnavailable  $e) {
             Log::error($e->getMessage());
             $paginator = new LengthAwarePaginator(
                 items: [
@@ -70,7 +72,7 @@ class TypesenseEngine extends AbstractEngine
 
         $documents = collect($results['hits'])->map(fn ($hit) => SearchHit::from([
             'highlights' => collect($hit['highlights'] ?? [])->map(
-                fn ($highlight) => SearchHit\Highlight::from([
+                fn ($highlight) => SearchHitHighlight::from([
                     'field' => $highlight['field'],
                     'matches' => $highlight['matched_tokens'],
                     'snippet' => $highlight['snippet'],
@@ -84,7 +86,7 @@ class TypesenseEngine extends AbstractEngine
                 'label' => $this->getFacetConfig($facet['field_name'])['label'] ?? '',
                 'field' => $facet['field_name'],
                 'values' => collect($facet['counts'])->map(
-                    fn ($value) => SearchFacet\FacetValue::from([
+                    fn ($value) => SearchFacetValue::from([
                         'label' => $value['value'],
                         'value' => $value['value'],
                         'count' => $value['count'],
@@ -128,7 +130,6 @@ class TypesenseEngine extends AbstractEngine
         ]);
     }
 
-
     protected function buildSearch(array $options): array
     {
         $searchQueries = $this->getSearchQueries();
@@ -165,9 +166,9 @@ class TypesenseEngine extends AbstractEngine
                     if ($value == 'false' || $value == 'true') {
                         return $value;
                     }
+
                     return '`'.$value.'`';
                 });
-
 
                 if ($values->count() > 1) {
                     $filters->push($field.':['.collect($values)->join(',').']');
@@ -180,7 +181,7 @@ class TypesenseEngine extends AbstractEngine
 
             $queryBy = $options['query_by'];
 
-            if (!$this->query) {
+            if (! $this->query) {
                 $queryBy = str_replace('embedding,', '', $queryBy);
             }
 
@@ -197,7 +198,7 @@ class TypesenseEngine extends AbstractEngine
             ];
 
             if ($this->query) {
-                $params['vector_query'] = "embedding:([], k: 200)";
+                $params['vector_query'] = 'embedding:([], k: 200)';
             }
 
             if ($filters->count()) {
@@ -214,11 +215,11 @@ class TypesenseEngine extends AbstractEngine
     {
         $typesense = app(EngineManager::class)->engine('typesense');
         $index = (new Product)->searchableAs();
+
         return $typesense->getCollections()[$index]->documents->delete([
             'filter_by' => 'id: ['.$ids->join(',').']',
         ]);
     }
-
 
     protected function getFieldConfig(): array
     {
