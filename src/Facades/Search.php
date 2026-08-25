@@ -4,7 +4,6 @@ namespace Lunar\Search\Facades;
 
 use Illuminate\Support\Facades\Facade;
 use Lunar\Search\Contracts\SearchManagerContract;
-use Lunar\Search\SearchManager;
 
 /**
  * @method static void createDatabaseDriver()
@@ -20,7 +19,7 @@ use Lunar\Search\SearchManager;
  * @method static \Lunar\Search\SearchManager setContainer(\Illuminate\Contracts\Container\Container $container)
  * @method static \Lunar\Search\SearchManager forgetDrivers()
  *
- * @see SearchManager
+ * @see \Lunar\Search\SearchManager
  */
 class Search extends Facade
 {

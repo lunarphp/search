@@ -2,16 +2,13 @@
 
 namespace Lunar\Search\Engines;
 
-use GuzzleHttp\Exception\ConnectException;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Laravel\Scout\EngineManager;
 use Lunar\Models\Product;
 use Lunar\Search\Data\SearchFacet;
-use Lunar\Search\Data\SearchFacetValue;
 use Lunar\Search\Data\SearchHit;
-use Lunar\Search\Data\SearchHitHighlight;
 use Lunar\Search\Data\SearchResults;
 use Typesense\Documents;
 use Typesense\Exceptions\ServiceUnavailable;
@@ -55,7 +52,7 @@ class TypesenseEngine extends AbstractEngine
                 ];
             });
 
-        } catch (ConnectException|ServiceUnavailable  $e) {
+        } catch (\GuzzleHttp\Exception\ConnectException|ServiceUnavailable  $e) {
             Log::error($e->getMessage());
             $paginator = new LengthAwarePaginator(
                 items: [
@@ -72,7 +69,7 @@ class TypesenseEngine extends AbstractEngine
 
         $documents = collect($results['hits'])->map(fn ($hit) => SearchHit::from([
             'highlights' => collect($hit['highlights'] ?? [])->map(
-                fn ($highlight) => SearchHitHighlight::from([
+                fn ($highlight) => \Lunar\Search\Data\SearchHitHighlight::from([
                     'field' => $highlight['field'],
                     'matches' => $highlight['matched_tokens'],
                     'snippet' => $highlight['snippet'],
@@ -86,7 +83,7 @@ class TypesenseEngine extends AbstractEngine
                 'label' => $this->getFacetConfig($facet['field_name'])['label'] ?? '',
                 'field' => $facet['field_name'],
                 'values' => collect($facet['counts'])->map(
-                    fn ($value) => SearchFacetValue::from([
+                    fn ($value) => \Lunar\Search\Data\SearchFacetValue::from([
                         'label' => $value['value'],
                         'value' => $value['value'],
                         'count' => $value['count'],
